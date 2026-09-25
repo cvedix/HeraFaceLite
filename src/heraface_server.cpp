@@ -205,6 +205,14 @@ std::optional<cv::Mat> request_image(const httplib::Request& request) {
     return image;
 }
 
+std::optional<cv::Mat> decode_image(const httplib::FormData& file) {
+    std::vector<unsigned char> bytes(file.content.begin(), file.content.end());
+    cv::Mat encoded(1, static_cast<int>(bytes.size()), CV_8UC1, bytes.data());
+    cv::Mat image = cv::imdecode(encoded, cv::IMREAD_COLOR);
+    if (image.empty()) return std::nullopt;
+    return image;
+}
+
 std::string request_value(const httplib::Request& request, const std::string& key) {
     if (request.form.has_field(key)) return request.form.get_field(key);
     if (request.has_param(key)) return request.get_param_value(key);
@@ -257,6 +265,25 @@ int main(int argc, char** argv) {
 
     server.Delete(R"(/api/v1/faces/(.+))", [&](const httplib::Request& request, httplib::Response& response) {
         reply_json(response, service.remove(request.matches[1].str()), 200);
+    });
+
+    server.Post("/api/v1/faces/sync", [&](const httplib::Request& request, httplib::Response& response) {
+        const auto person_ids = request.form.get_fields("person_id");
+        const auto images = request.form.get_files("image");
+        json results = json::array();
+        if (person_ids.size() != images.size() || person_ids.empty()) {
+            reply_json(response, {{"success", false}, {"error_code", "SYNC_FIELDS_MISMATCH"}}, 400);
+            return;
+        }
+        bool success = true;
+        for (size_t index = 0; index < person_ids.size(); ++index) {
+            auto image = decode_image(images[index]);
+            auto result = image ? service.enroll(*image, person_ids[index], person_ids[index])
+                                : json({{"success", false}, {"error_code", "INVALID_IMAGE"}});
+            success = success && result.value("success", false);
+            results.push_back(result);
+        }
+        reply_json(response, {{"success", success}, {"results", results}}, success ? 200 : 400);
     });
 
     std::cout << "HeraFace Lite REST API listening on 0.0.0.0:" << settings.port << '\n';
