@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import styles from "./page.module.css";
 
-type View = "overview" | "people" | "keys" | "audit" | "attendance";
+type View = string;
 type Person = { id: string; name: string; department: string; lastSeen: string };
 type Key = { name: string; prefix: string; scope: string; status: string };
 type Log = { action: string; detail: string; user: string; time: string };
