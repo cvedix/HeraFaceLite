@@ -24,6 +24,7 @@
 #include <vector>
 
 #include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
 
 using json = nlohmann::json;
 
@@ -288,8 +289,12 @@ public:
         if (image.empty()) {
             return { {"success", false}, {"error_code", "INVALID_IMAGE"} };
         }
-        if (!source_->push_frames({image})) {
-            return { {"success", false}, {"error_code", "SOURCE_UNAVAILABLE"} };
+        // app_src_node requires a stable frame size; phone cameras send varying resolutions.
+        cv::Mat normalized;
+        cv::resize(image, normalized, cv::Size(640, 480), 0.0, 0.0, cv::INTER_AREA);
+        if (!source_->push_frames({normalized})) {
+            return { {"success", false}, {"error_code", "SOURCE_UNAVAILABLE"},
+                     {"message", "Could not enqueue normalized frame"} };
         }
         auto result = collector_->wait_for_result();
         if (!result) {
