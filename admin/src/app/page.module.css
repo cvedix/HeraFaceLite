@@ -11,3 +11,5 @@ body{background:#000;color:#fff}.content,.sidebar{background:#000;color:#fff}.st
 .keyRow .remove,.tableRow .remove{display:inline-flex;align-items:center;justify-content:center;justify-self:end;min-width:76px;min-height:34px;padding:8px 12px!important;border-radius:6px;white-space:nowrap;overflow:visible;font-size:12px;font-weight:700}
 /* Consistent card action buttons */
 .cardHead .textButton,.cardHead .secondary{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-height:34px;min-width:96px;padding:8px 12px!important;border-radius:6px;background:#2563eb!important;color:#fff!important;font-size:12px;font-weight:700;line-height:1;white-space:nowrap;overflow:visible}.cardHead .textButton:hover,.cardHead .secondary:hover{background:#1d4ed8!important}
+/* Additional sidebar menu */
+.extraNav{display:grid;gap:5px;margin-top:10px;padding-top:10px;border-top:1px solid #1f2937}.extraNav button{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:0;border-radius:7px;background:transparent;color:#fff;text-align:left;font-size:13px;cursor:pointer}.extraNav button:hover{background:#2563eb}
