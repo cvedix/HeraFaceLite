@@ -14,6 +14,7 @@
 #include <unordered_map>
 #include <chrono>
 #include <atomic>
+#include <ctime>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,7 @@ struct RequestMetrics {
     std::atomic<uint64_t> total_latency_ms{0};
     mutable std::mutex mutex;
     std::unordered_map<std::string, uint64_t> by_endpoint;
+    std::unordered_map<std::string, uint64_t> by_day;
     std::string last_endpoint;
     std::chrono::steady_clock::time_point last_request{};
 
@@ -46,6 +48,12 @@ struct RequestMetrics {
         total.fetch_add(1);
         std::lock_guard<std::mutex> lock(mutex);
         by_endpoint[request.path]++;
+        const auto now = std::time(nullptr);
+        std::tm local_time{};
+        localtime_r(&now, &local_time);
+        char day[11]{};
+        std::strftime(day, sizeof(day), "%Y-%m-%d", &local_time);
+        by_day[day]++;
         last_endpoint = request.path;
         last_request = std::chrono::steady_clock::now();
     }
@@ -62,16 +70,18 @@ struct RequestMetrics {
 
     json snapshot() const {
         json endpoints = json::object();
+        json daily = json::object();
         std::string last;
         {
             std::lock_guard<std::mutex> lock(mutex);
             for (const auto& [path, count] : by_endpoint) endpoints[path] = count;
+            for (const auto& [day, count] : by_day) daily[day] = count;
             last = last_endpoint;
         }
         const auto count = total.load();
         return {{"total", count}, {"success", success.load()}, {"errors", errors.load()},
                 {"average_latency_ms", count ? total_latency_ms.load() / count : 0},
-                {"last_endpoint", last}, {"by_endpoint", endpoints}};
+                {"last_endpoint", last}, {"by_endpoint", endpoints}, {"daily", daily}};
     }
 
 private:
