@@ -15,6 +15,8 @@
 #include <chrono>
 #include <atomic>
 #include <ctime>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -30,6 +32,39 @@ struct Settings {
     int port = 8080;
     float threshold = 0.70f;
     int min_face_size = 40;
+};
+
+class AuditStore {
+public:
+    explicit AuditStore(std::string path) : path_(std::move(path)) {}
+
+    void append(const std::string& action, const json& detail, bool success) {
+        const auto now = std::time(nullptr);
+        std::tm local_time{};
+        localtime_r(&now, &local_time);
+        std::ostringstream timestamp;
+        timestamp << std::put_time(&local_time, "%Y-%m-%dT%H:%M:%S");
+        std::lock_guard<std::mutex> lock(mutex_);
+        std::ofstream output(path_, std::ios::app);
+        output << json{{"timestamp", timestamp.str()}, {"action", action},
+                       {"success", success}, {"detail", detail}}.dump() << '\n';
+    }
+
+    json list(size_t limit = 100) const {
+        std::vector<json> events;
+        std::ifstream input(path_);
+        std::string line;
+        while (std::getline(input, line)) {
+            try { events.push_back(json::parse(line)); } catch (...) {}
+        }
+        if (events.size() > limit) events.erase(events.begin(), events.end() - static_cast<std::ptrdiff_t>(limit));
+        std::reverse(events.begin(), events.end());
+        return events;
+    }
+
+private:
+    std::string path_;
+    mutable std::mutex mutex_;
 };
 
 struct RequestMetrics {
@@ -136,6 +171,7 @@ class HeraFaceService {
 public:
     explicit HeraFaceService(const Settings& settings)
         : settings_(settings),
+                    audit_(settings.database_path + ".audit.jsonl"),
           source_(std::make_shared<cvedix_nodes::cvedix_app_src_node>("rest_source", 0)),
           recognizer_(std::make_shared<cvedix_nodes::cvedix_face_recognizer_node>(
               "rest_recognizer", settings.model_dir, settings.database_path,
@@ -222,6 +258,12 @@ public:
                  {"database_size", recognizer_->getDatabaseSize()} };
     }
 
+    json audit(size_t limit = 100) const { return audit_.list(limit); }
+
+    void record_request(const std::string& endpoint, int status, uint64_t latency_ms) {
+        audit_.append("api.request", {{"endpoint", endpoint}, {"status", status}, {"latency_ms", latency_ms}}, status < 400);
+    }
+
 private:
     void load_registry() {
         std::ifstream input(settings_.database_path + ".registry.json");
@@ -246,6 +288,7 @@ private:
     }
 
     Settings settings_;
+    AuditStore audit_;
     std::mutex request_mutex_;
     std::unordered_map<std::string, int64_t> registry_;
     std::shared_ptr<cvedix_nodes::cvedix_app_src_node> source_;
@@ -322,6 +365,11 @@ int main(int argc, char** argv) {
     });
     server.set_post_routing_handler([&](const httplib::Request& request, httplib::Response& response) {
         metrics.finish(request, response, request_started);
+        if (request.path == "/api/v1/faces/enroll" || request.path == "/api/v1/faces/recognize") {
+            const auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - request_started).count();
+            service.record_request(request.path, response.status, static_cast<uint64_t>(latency));
+        }
     });
     server.set_mount_point("/", HERAFACE_WEB_DIR);
 
@@ -331,6 +379,12 @@ int main(int argc, char** argv) {
 
     server.Get("/api/v1/metrics", [&](const httplib::Request&, httplib::Response& response) {
         reply_json(response, metrics.snapshot());
+    });
+
+    server.Get("/api/v1/audit", [&](const httplib::Request& request, httplib::Response& response) {
+        size_t limit = 100;
+        if (request.has_param("limit")) limit = static_cast<size_t>(std::stoul(request.get_param_value("limit")));
+        reply_json(response, {{"success", true}, {"items", service.audit(limit)}});
     });
 
     server.Post("/api/v1/faces/enroll", [&](const httplib::Request& request, httplib::Response& response) {
