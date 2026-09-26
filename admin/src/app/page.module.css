@@ -9,3 +9,5 @@ body{background:#000;color:#fff}.content,.sidebar{background:#000;color:#fff}.st
 .stat,.card,.hero,.loginCard{background:#000!important;color:#fff!important;border-color:#1f2937!important}.stat small,.stat span,.card h3,.hero h2,.content h1,.content h2,.event b,.person b,.tableRow b,.keyRow b,.auditRow b,.attRow b{color:#fff!important}.form input,.loginCard input{background:#000!important;color:#fff!important;border-color:#334155!important}
 /* Action button sizing */
 .keyRow .remove,.tableRow .remove{display:inline-flex;align-items:center;justify-content:center;justify-self:end;min-width:76px;min-height:34px;padding:8px 12px!important;border-radius:6px;white-space:nowrap;overflow:visible;font-size:12px;font-weight:700}
+/* Consistent card action buttons */
+.cardHead .textButton,.cardHead .secondary{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-height:34px;min-width:96px;padding:8px 12px!important;border-radius:6px;background:#2563eb!important;color:#fff!important;font-size:12px;font-weight:700;line-height:1;white-space:nowrap;overflow:visible}.cardHead .textButton:hover,.cardHead .secondary:hover{background:#1d4ed8!important}
