@@ -3,9 +3,9 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "HeraFace Lite Console",
-  description: "Edge identity administration",
+  description: "Quản trị hệ thống nhận diện tại thiết bị",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="vi"><body>{children}</body></html>;
 }
