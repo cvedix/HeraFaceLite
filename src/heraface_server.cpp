@@ -12,6 +12,8 @@
 #include <optional>
 #include <fstream>
 #include <unordered_map>
+#include <chrono>
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -27,6 +29,50 @@ struct Settings {
     int port = 8080;
     float threshold = 0.70f;
     int min_face_size = 40;
+};
+
+struct RequestMetrics {
+    std::atomic<uint64_t> total{0};
+    std::atomic<uint64_t> success{0};
+    std::atomic<uint64_t> errors{0};
+    std::atomic<uint64_t> total_latency_ms{0};
+    mutable std::mutex mutex;
+    std::unordered_map<std::string, uint64_t> by_endpoint;
+    std::string last_endpoint;
+    std::chrono::steady_clock::time_point last_request{};
+
+    void begin(const httplib::Request& request) {
+        if (request.path.rfind("/api/v1/", 0) != 0 || request.method == "OPTIONS") return;
+        total.fetch_add(1);
+        std::lock_guard<std::mutex> lock(mutex);
+        by_endpoint[request.path]++;
+        last_endpoint = request.path;
+        last_request = std::chrono::steady_clock::now();
+    }
+
+    void finish(const httplib::Request& request, const httplib::Response& response,
+                std::chrono::steady_clock::time_point started) {
+        if (request.path.rfind("/api/v1/", 0) != 0 || request.method == "OPTIONS") return;
+        const auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - started).count();
+        total_latency_ms.fetch_add(static_cast<uint64_t>(latency));
+        if (response.status >= 200 && response.status < 400) success.fetch_add(1);
+        else errors.fetch_add(1);
+    }
+
+    json snapshot() const {
+        json endpoints = json::object();
+        std::string last;
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            for (const auto& [path, count] : by_endpoint) endpoints[path] = count;
+            last = last_endpoint;
+        }
+        const auto count = total.load();
+        return {{"total", count}, {"success", success.load()}, {"errors", errors.load()},
+                {"average_latency_ms", count ? total_latency_ms.load() / count : 0},
+                {"last_endpoint", last}, {"by_endpoint", endpoints}};
+    }
 };
 
 class RecognitionCollector final : public cvedix_nodes::cvedix_des_node {
@@ -237,6 +283,7 @@ int main(int argc, char** argv) {
     std::filesystem::create_directories(std::filesystem::path(settings.database_path).parent_path());
 
     HeraFaceService service(settings);
+    RequestMetrics metrics;
     httplib::Server server;
     server.set_payload_max_length(5 * 1024 * 1024);
     server.set_default_headers({
@@ -247,10 +294,26 @@ int main(int argc, char** argv) {
     server.Options(R"(/api/v1/.*)", [](const httplib::Request&, httplib::Response& response) {
         response.status = 204;
     });
+    server.set_pre_routing_handler([&](const httplib::Request& request, httplib::Response&) {
+        metrics.begin(request);
+        return httplib::Server::HandlerResponse::Unhandled;
+    });
+    thread_local auto request_started = std::chrono::steady_clock::now();
+    server.set_pre_request_handler([&](const httplib::Request&, httplib::Response&) {
+        request_started = std::chrono::steady_clock::now();
+        return httplib::Server::HandlerResponse::Unhandled;
+    });
+    server.set_post_routing_handler([&](const httplib::Request& request, httplib::Response& response) {
+        metrics.finish(request, response, request_started);
+    });
     server.set_mount_point("/", HERAFACE_WEB_DIR);
 
     server.Get("/api/v1/health", [&](const httplib::Request&, httplib::Response& response) {
         reply_json(response, service.health());
+    });
+
+    server.Get("/api/v1/metrics", [&](const httplib::Request&, httplib::Response& response) {
+        reply_json(response, metrics.snapshot());
     });
 
     server.Post("/api/v1/faces/enroll", [&](const httplib::Request& request, httplib::Response& response) {
