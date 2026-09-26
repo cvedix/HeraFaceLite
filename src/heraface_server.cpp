@@ -239,6 +239,14 @@ int main(int argc, char** argv) {
     HeraFaceService service(settings);
     httplib::Server server;
     server.set_payload_max_length(5 * 1024 * 1024);
+    server.set_default_headers({
+        {"Access-Control-Allow-Origin", "http://localhost:3001"},
+        {"Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS"},
+        {"Access-Control-Allow-Headers", "Content-Type, Authorization"}
+    });
+    server.Options(R"(/api/v1/.*)", [](const httplib::Request&, httplib::Response& response) {
+        response.status = 204;
+    });
     server.set_mount_point("/", HERAFACE_WEB_DIR);
 
     server.Get("/api/v1/health", [&](const httplib::Request&, httplib::Response& response) {
