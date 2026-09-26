@@ -22,6 +22,16 @@ cmake --build build --target heraface_server -j2
 
 The server accepts multipart images and keeps the local SeetaFace6 database on disk.
 
+## Admin panel
+
+Open the server root in a browser:
+
+```text
+http://127.0.0.1:8080/
+```
+
+The panel provides health status, face enrollment, image recognition, registered-person listing, and deletion. It uses the same REST endpoints as an ERP integration.
+
 ## API
 
 Health check:

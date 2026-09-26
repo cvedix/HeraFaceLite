@@ -239,6 +239,7 @@ int main(int argc, char** argv) {
     HeraFaceService service(settings);
     httplib::Server server;
     server.set_payload_max_length(5 * 1024 * 1024);
+    server.set_mount_point("/", HERAFACE_WEB_DIR);
 
     server.Get("/api/v1/health", [&](const httplib::Request&, httplib::Response& response) {
         reply_json(response, service.health());

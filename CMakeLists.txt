@@ -13,6 +13,7 @@ target_include_directories(heraface_server PRIVATE
 )
 
 target_compile_definitions(heraface_server PRIVATE CVEDIX_WITH_FACE)
+target_compile_definitions(heraface_server PRIVATE HERAFACE_WEB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/web")
 target_link_libraries(heraface_server PRIVATE cvedix_core Threads::Threads)
 
 set_target_properties(heraface_server PROPERTIES
@@ -23,3 +24,4 @@ set_target_properties(heraface_server PROPERTIES
 
 install(TARGETS heraface_server DESTINATION bin OPTIONAL)
 install(FILES README.md DESTINATION share/heraface-lite OPTIONAL)
+install(DIRECTORY web/ DESTINATION share/heraface-lite/web OPTIONAL)
