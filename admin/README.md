@@ -13,9 +13,6 @@ Open `http://127.0.0.1:3001`.
 
 Additional routes:
 
-- `http://127.0.0.1:3001/test` - recognition/enrollment playground and request contract preview.
-- `http://127.0.0.1:3001/camera` - capture registration/recognition images from a webcam.
-- `http://127.0.0.1:3001/settings` - similarity threshold, camera ID, mask model and runtime settings.
 - `http://127.0.0.1:3001/keys` - create and revoke ERP/camera access keys.
 - `http://127.0.0.1:3001/audit` - search and print the audit trail.
 
