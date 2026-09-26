@@ -1,6 +1,9 @@
 #include "cvedix/nodes/src/cvedix_app_src_node.h"
 #include "cvedix/nodes/infers/cvedix_face_recognizer_node.h"
 #include "cvedix/nodes/common/cvedix_des_node.h"
+#include <seeta/FaceDetector.h>
+#include <seeta/FaceLandmarker.h>
+#include <seeta/FaceAntiSpoofing.h>
 #include "cvedix/third_party/cpp_httplib/httplib.h"
 #include "cvedix/third_party/nlohmann/json.hpp"
 #include "cvedix/utils/logger/cvedix_logger.h"
@@ -67,6 +70,59 @@ private:
     mutable std::mutex mutex_;
 };
 
+class LivenessService {
+public:
+    explicit LivenessService(const std::string& model_dir) {
+        try {
+            const auto path = [&model_dir](const std::string& name) { return model_dir + "/" + name; };
+            detector_ = std::make_unique<seeta::FaceDetector>(seeta::ModelSetting(path("face_detector.csta"), seeta::ModelSetting::CPU, 0));
+            landmarker_ = std::make_unique<seeta::FaceLandmarker>(seeta::ModelSetting(path("face_landmarker_pts5.csta"), seeta::ModelSetting::CPU, 0));
+            anti_spoofing_ = std::make_unique<seeta::FaceAntiSpoofing>(seeta::ModelSetting(path("fas_first.csta"), seeta::ModelSetting::CPU, 0));
+            anti_spoofing_->SetThreshold(0.3f, 0.80f);
+            available_ = true;
+        } catch (const std::exception& error) {
+            std::cerr << "Anti-spoofing disabled: " << error.what() << '\n';
+        }
+    }
+
+    json check(const cv::Mat& image) const {
+        if (!available_) return {{"success", false}, {"error_code", "LIVENESS_UNAVAILABLE"}};
+        if (image.empty()) return {{"success", false}, {"error_code", "INVALID_IMAGE"}};
+        SeetaImageData input{image.cols, image.rows, image.channels(), image.data};
+        const auto faces = detector_->detect(input);
+        if (faces.size == 0) return {{"success", false}, {"error_code", "NO_FACE"}, {"message", "No face detected"}};
+        int best = 0;
+        for (int index = 1; index < faces.size; ++index) {
+            const auto current = faces.data[index].pos.width * faces.data[index].pos.height;
+            const auto selected = faces.data[best].pos.width * faces.data[best].pos.height;
+            if (current > selected) best = index;
+        }
+        const auto face = faces.data[best].pos;
+        const auto points = landmarker_->mark(input, face);
+        const auto status = anti_spoofing_->Predict(input, face, points.data());
+        float clarity = 0.0f, reality = 0.0f;
+        anti_spoofing_->GetPreFrameScore(&clarity, &reality);
+        const bool real = status == seeta::FaceAntiSpoofing::REAL;
+        return {{"success", true}, {"is_real", real}, {"status", statusName(status)},
+                {"liveness_status", static_cast<int>(status)}, {"clarity", clarity},
+                {"reality", reality}, {"face_count", faces.size}};
+    }
+
+private:
+    static std::string statusName(seeta::FaceAntiSpoofing::Status status) {
+        switch (status) {
+            case seeta::FaceAntiSpoofing::REAL: return "REAL";
+            case seeta::FaceAntiSpoofing::SPOOF: return "SPOOF";
+            case seeta::FaceAntiSpoofing::FUZZY: return "FUZZY";
+            default: return "DETECTING";
+        }
+    }
+    std::unique_ptr<seeta::FaceDetector> detector_;
+    std::unique_ptr<seeta::FaceLandmarker> landmarker_;
+    std::unique_ptr<seeta::FaceAntiSpoofing> anti_spoofing_;
+    bool available_ = false;
+};
+
 struct RequestMetrics {
     std::atomic<uint64_t> total{0};
     std::atomic<uint64_t> success{0};
@@ -123,7 +179,8 @@ private:
     static bool is_face_request(const httplib::Request& request) {
         return request.method == "POST" &&
                (request.path == "/api/v1/faces/enroll" ||
-                request.path == "/api/v1/faces/recognize");
+                request.path == "/api/v1/faces/recognize" ||
+                request.path == "/api/v1/faces/liveness");
     }
 };
 
@@ -343,6 +400,7 @@ int main(int argc, char** argv) {
     std::filesystem::create_directories(std::filesystem::path(settings.database_path).parent_path());
 
     HeraFaceService service(settings);
+    LivenessService liveness(settings.model_dir);
     RequestMetrics metrics;
     httplib::Server server;
     server.set_payload_max_length(5 * 1024 * 1024);
@@ -365,7 +423,7 @@ int main(int argc, char** argv) {
     });
     server.set_post_routing_handler([&](const httplib::Request& request, httplib::Response& response) {
         metrics.finish(request, response, request_started);
-        if (request.path == "/api/v1/faces/enroll" || request.path == "/api/v1/faces/recognize") {
+        if (request.path == "/api/v1/faces/enroll" || request.path == "/api/v1/faces/recognize" || request.path == "/api/v1/faces/liveness") {
             const auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - request_started).count();
             service.record_request(request.path, response.status, static_cast<uint64_t>(latency));
@@ -400,6 +458,11 @@ int main(int argc, char** argv) {
         const auto camera_id = request_value(request, "camera_id");
         reply_json(response, image ? service.recognize(*image, camera_id)
                                    : json({{"success", false}, {"error_code", "INVALID_IMAGE"}}), image ? 200 : 400);
+    });
+
+    server.Post("/api/v1/faces/liveness", [&](const httplib::Request& request, httplib::Response& response) {
+        const auto image = request_image(request);
+        reply_json(response, image ? liveness.check(*image) : json({{"success", false}, {"error_code", "INVALID_IMAGE"}}), image ? 200 : 400);
     });
 
     server.Get("/api/v1/faces", [&](const httplib::Request&, httplib::Response& response) {
