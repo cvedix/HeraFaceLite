@@ -42,7 +42,7 @@ struct RequestMetrics {
     std::chrono::steady_clock::time_point last_request{};
 
     void begin(const httplib::Request& request) {
-        if (request.path.rfind("/api/v1/", 0) != 0 || request.method == "OPTIONS") return;
+        if (!is_face_request(request)) return;
         total.fetch_add(1);
         std::lock_guard<std::mutex> lock(mutex);
         by_endpoint[request.path]++;
@@ -52,7 +52,7 @@ struct RequestMetrics {
 
     void finish(const httplib::Request& request, const httplib::Response& response,
                 std::chrono::steady_clock::time_point started) {
-        if (request.path.rfind("/api/v1/", 0) != 0 || request.method == "OPTIONS") return;
+        if (!is_face_request(request)) return;
         const auto latency = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - started).count();
         total_latency_ms.fetch_add(static_cast<uint64_t>(latency));
@@ -72,6 +72,13 @@ struct RequestMetrics {
         return {{"total", count}, {"success", success.load()}, {"errors", errors.load()},
                 {"average_latency_ms", count ? total_latency_ms.load() / count : 0},
                 {"last_endpoint", last}, {"by_endpoint", endpoints}};
+    }
+
+private:
+    static bool is_face_request(const httplib::Request& request) {
+        return request.method == "POST" &&
+               (request.path == "/api/v1/faces/enroll" ||
+                request.path == "/api/v1/faces/recognize");
     }
 };
 
