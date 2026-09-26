@@ -1,5 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap');
-:root { --ink:#172a2b; --muted:#6d7e7f; --line:#dce7e5; --paper:#f3f7f5; --panel:#fff; --teal:#0d746d; --teal-dark:#07554f; --orange:#d97a39; }
+:root { --ink:#111827; --muted:#64748b; --line:#dbe3ef; --paper:#f8fafc; --panel:#fff; --teal:#1d4ed8; --teal-dark:#1e40af; --orange:#2563eb; }
 * { box-sizing:border-box; margin:0; padding:0; }
 body { min-height:100vh; background:var(--paper); color:var(--ink); font:14px/1.5 'DM Sans',sans-serif; }
-button,input { font:inherit; } button { cursor:pointer; border:0; } button:focus-visible,input:focus-visible { outline:3px solid #b6dbd4; outline-offset:2px; }
+button,input { font:inherit; } button { cursor:pointer; border:0; } button:focus-visible,input:focus-visible { outline:3px solid #93c5fd; outline-offset:2px; }
