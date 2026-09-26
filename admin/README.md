@@ -54,3 +54,12 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Backend face test
+
+The main console includes a `Kiểm thử backend` view with two operations:
+
+- `Đăng ký khuôn mặt`: sends `person_id`, `name`, and an image to `/api/v1/faces/enroll`.
+- `Xác thực khuôn mặt`: sends an image and camera ID to `/api/v1/faces/recognize`.
+
+Configure `NEXT_PUBLIC_HERAFACE_API_URL` when the REST service is not running at `http://127.0.0.1:18083`.
