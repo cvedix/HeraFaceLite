@@ -14,7 +14,7 @@ export default function TestPage() {
       setResult("Vui lòng chọn ảnh trước.");
       return;
     }
-    setResult(`Phản hồi thử nghiệm\nrecognized: ${mode === "recognize"}\nperson_id: NV001\nsimilarity: 0.91\nsource: ${mode}`);
+    setResult(`Phản hồi thử nghiệm\nđã nhận diện: ${mode === "recognize"}\nperson_id: NV001\nsimilarity: 0.91\nnguồn: ${mode}`);
   }
 
   return <main className={styles.page}>
