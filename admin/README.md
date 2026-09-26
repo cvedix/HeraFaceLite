@@ -15,6 +15,8 @@ Additional routes:
 
 - `http://127.0.0.1:3001/test` - recognition/enrollment playground and request contract preview.
 - `http://127.0.0.1:3001/settings` - similarity threshold, camera ID, mask model and runtime settings.
+- `http://127.0.0.1:3001/keys` - create and revoke ERP/camera access keys.
+- `http://127.0.0.1:3001/audit` - search and print the audit trail.
 
 The current admin iteration contains the complete navigation and interaction prototype for login, people and embeddings, access keys, audit log, and attendance. Demo state is persisted in browser `localStorage` so the flows can be tested without a second database service.
 
