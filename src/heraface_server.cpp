@@ -353,7 +353,8 @@ int main(int argc, char** argv) {
     });
 
     server.Delete(R"(/api/v1/faces/(.+))", [&](const httplib::Request& request, httplib::Response& response) {
-        reply_json(response, service.remove(request.matches[1].str()), 200);
+        const auto result = service.remove(request.matches[1].str());
+        reply_json(response, result, result.value("success", false) ? 200 : 404);
     });
 
     server.Post("/api/v1/faces/sync", [&](const httplib::Request& request, httplib::Response& response) {
