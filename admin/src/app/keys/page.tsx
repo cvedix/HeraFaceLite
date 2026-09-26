@@ -6,15 +6,12 @@ import Link from "next/link";
 import styles from "../route.module.css";
 
 type AccessKey = { name: string; prefix: string; scope: string; status: string; created: string };
-const seed: AccessKey[] = [
-  { name: "Tích hợp ERP", prefix: "hf_live_7a2...", scope: "recognize, checkin", status: "Đang hoạt động", created: "24/09/2026" },
-  { name: "Camera biên 01", prefix: "hf_cam_19f...", scope: "recognize", status: "Đang hoạt động", created: "21/09/2026" },
-];
+const seed: AccessKey[] = [];
 
 export default function KeysPage() {
   const [keys, setKeys] = useState<AccessKey[]>(seed);
   const [notice, setNotice] = useState("");
-  useEffect(() => { const saved = localStorage.getItem("hera-keys"); if (saved) setKeys(JSON.parse(saved)); }, []);
+  useEffect(() => { if (!localStorage.getItem("hera-demo-cleared-v1")) { localStorage.removeItem("hera-keys"); localStorage.removeItem("hera-people"); localStorage.removeItem("hera-logs"); localStorage.setItem("hera-demo-cleared-v1", "true"); } }, []);
   useEffect(() => { localStorage.setItem("hera-keys", JSON.stringify(keys)); }, [keys]);
   const create = () => { const key = { name: `Khóa tích hợp ${keys.length + 1}`, prefix: `hf_live_${Math.random().toString(36).slice(2, 8)}...`, scope: "recognize, checkin", status: "Đang hoạt động", created: "Hôm nay" }; setKeys((items) => [key, ...items]); setNotice("Đã tạo khóa truy cập mới."); };
   const revoke = (prefix: string) => { setKeys((items) => items.map((key) => key.prefix === prefix ? { ...key, status: "Đã thu hồi" } : key)); setNotice("Đã thu hồi khóa truy cập."); };

@@ -6,16 +6,12 @@ import Link from "next/link";
 import styles from "../route.module.css";
 
 type Audit = { action: string; detail: string; user: string; time: string };
-const seed: Audit[] = [
-  { action: "Nhận diện khuôn mặt", detail: "NV001 · Cổng A", user: "ERP API", time: "Hôm nay, 08:42" },
-  { action: "Đăng ký khuôn mặt", detail: "NV027 · 3 embedding", user: "admin@hera.local", time: "Hôm qua, 16:12" },
-  { action: "Tạo khóa truy cập", detail: "Camera biên 01", user: "admin@hera.local", time: "21/09/2026" },
-];
+const seed: Audit[] = [];
 
 export default function AuditPage() {
   const [logs, setLogs] = useState<Audit[]>(seed);
   const [filter, setFilter] = useState("");
-  useEffect(() => { const saved = localStorage.getItem("hera-logs"); if (saved) setLogs(JSON.parse(saved)); }, []);
+  useEffect(() => { if (!localStorage.getItem("hera-demo-cleared-v1")) { localStorage.removeItem("hera-keys"); localStorage.removeItem("hera-people"); localStorage.removeItem("hera-logs"); localStorage.setItem("hera-demo-cleared-v1", "true"); } }, []);
   const filtered = logs.filter((log) => `${log.action} ${log.detail} ${log.user}`.toLowerCase().includes(filter.toLowerCase()));
   return <main className={styles.page}>
     <Link className={styles.back} href="/">← Quay lại bảng điều khiển</Link>
