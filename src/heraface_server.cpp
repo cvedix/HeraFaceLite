@@ -312,6 +312,9 @@ public:
         response["name"] = face->identify.empty() ? json(nullptr) : json(face->identify);
         response["similarity"] = face->identify_score;
         response["face_score"] = face->score;
+            if (face->identify.empty()) {
+                response["message"] = "Face detected, but no matching embedding was found";
+            }
         return response;
     }
 
