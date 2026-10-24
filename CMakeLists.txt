@@ -13,6 +13,9 @@ target_include_directories(heraface_server PRIVATE
 )
 
 target_compile_definitions(heraface_server PRIVATE CVEDIX_WITH_FACE)
+if(CVEDIX_SEETAFACE6_GPU_AVAILABLE)
+    target_compile_definitions(heraface_server PRIVATE CVEDIX_SEETAFACE6_GPU_AVAILABLE)
+endif()
 target_compile_definitions(heraface_server PRIVATE HERAFACE_WEB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/web")
 target_compile_definitions(heraface_server PRIVATE HERAFACE_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/NotoSans-Regular.ttf")
 target_link_libraries(heraface_server PRIVATE cvedix_core Threads::Threads)

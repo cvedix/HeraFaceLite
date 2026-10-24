@@ -41,6 +41,8 @@ struct Settings {
     int port = 8080;
     float threshold = 0.70f;
     int min_face_size = 40;
+    bool use_gpu = false;
+    int gpu_id = 0;
     // Anti-spoofing: how sharp the image must be, and how strict "real" must score.
     float liveness_clarity = 0.3f;
     float liveness_reality = 0.80f;
@@ -81,16 +83,19 @@ private:
 
 class LivenessService {
 public:
-    explicit LivenessService(const std::string& model_dir, float clarity_threshold = 0.3f, float reality_threshold = 0.80f) {
+    explicit LivenessService(const std::string& model_dir, bool use_gpu, int gpu_id,
+                             float clarity_threshold = 0.3f, float reality_threshold = 0.80f) {
         try {
             const auto path = [&model_dir](const std::string& name) { return model_dir + "/" + name; };
-            detector_ = std::make_unique<seeta::FaceDetector>(seeta::ModelSetting(path("face_detector.csta"), seeta::ModelSetting::CPU, 0));
-            landmarker_ = std::make_unique<seeta::FaceLandmarker>(seeta::ModelSetting(path("face_landmarker_pts5.csta"), seeta::ModelSetting::CPU, 0));
+            const auto device = use_gpu ? seeta::ModelSetting::GPU : seeta::ModelSetting::CPU;
+            const int device_id = use_gpu ? gpu_id : 0;
+            detector_ = std::make_unique<seeta::FaceDetector>(seeta::ModelSetting(path("face_detector.csta"), device, device_id));
+            landmarker_ = std::make_unique<seeta::FaceLandmarker>(seeta::ModelSetting(path("face_landmarker_pts5.csta"), device, device_id));
             seeta::ModelSetting fas_setting;
             fas_setting.append(path("fas_first.csta"));
             fas_setting.append(path("fas_second.csta"));
-            fas_setting.set_device(seeta::ModelSetting::CPU);
-            fas_setting.set_id(0);
+            fas_setting.set_device(device);
+            fas_setting.set_id(device_id);
             anti_spoofing_ = std::make_unique<seeta::FaceAntiSpoofing>(fas_setting);
             anti_spoofing_->SetThreshold(clarity_threshold, reality_threshold);
             available_ = true;
@@ -153,14 +158,16 @@ private:
 // Age + gender estimation. No expression/emotion model ships with this SeetaFace6 build.
 class FaceAttributesService {
 public:
-    explicit FaceAttributesService(const std::string& model_dir) {
+    explicit FaceAttributesService(const std::string& model_dir, bool use_gpu, int gpu_id) {
         try {
             const auto path = [&model_dir](const std::string& name) { return model_dir + "/" + name; };
-            detector_ = std::make_unique<seeta::FaceDetector>(seeta::ModelSetting(path("face_detector.csta"), seeta::ModelSetting::CPU, 0));
-            landmarker_ = std::make_unique<seeta::FaceLandmarker>(seeta::ModelSetting(path("face_landmarker_pts5.csta"), seeta::ModelSetting::CPU, 0));
-            age_predictor_ = std::make_unique<seeta::AgePredictor>(seeta::ModelSetting(path("age_predictor.csta"), seeta::ModelSetting::CPU, 0));
-            gender_predictor_ = std::make_unique<seeta::GenderPredictor>(seeta::ModelSetting(path("gender_predictor.csta"), seeta::ModelSetting::CPU, 0));
-            eye_state_detector_ = std::make_unique<seeta::EyeStateDetector>(seeta::ModelSetting(path("eye_state.csta"), seeta::ModelSetting::CPU, 0));
+            const auto device = use_gpu ? seeta::ModelSetting::GPU : seeta::ModelSetting::CPU;
+            const int device_id = use_gpu ? gpu_id : 0;
+            detector_ = std::make_unique<seeta::FaceDetector>(seeta::ModelSetting(path("face_detector.csta"), device, device_id));
+            landmarker_ = std::make_unique<seeta::FaceLandmarker>(seeta::ModelSetting(path("face_landmarker_pts5.csta"), device, device_id));
+            age_predictor_ = std::make_unique<seeta::AgePredictor>(seeta::ModelSetting(path("age_predictor.csta"), device, device_id));
+            gender_predictor_ = std::make_unique<seeta::GenderPredictor>(seeta::ModelSetting(path("gender_predictor.csta"), device, device_id));
+            eye_state_detector_ = std::make_unique<seeta::EyeStateDetector>(seeta::ModelSetting(path("eye_state.csta"), device, device_id));
             available_ = true;
         } catch (const std::exception& error) {
             std::cerr << "Age/gender prediction disabled: " << error.what() << '\n';
@@ -411,13 +418,14 @@ public:
     explicit HeraFaceService(const Settings& settings)
         : settings_(settings),
                     audit_(settings.database_path + ".audit.jsonl"),
-          liveness_(settings.model_dir, settings.liveness_clarity, settings.liveness_reality),
-          attributes_(settings.model_dir),
-          source_(std::make_shared<cvedix_nodes::cvedix_app_src_node>("rest_source", 0)),
-          recognizer_(std::make_shared<cvedix_nodes::cvedix_face_recognizer_node>(
-              "rest_recognizer", settings.model_dir, settings.database_path,
-              settings.threshold, settings.min_face_size, false, false, 0,
-              cvedix_nodes::FaceRecognizerMode::SYNC)),
+                    liveness_(settings.model_dir, settings.use_gpu, settings.gpu_id,
+                              settings.liveness_clarity, settings.liveness_reality),
+                    attributes_(settings.model_dir, settings.use_gpu, settings.gpu_id),
+                    source_(std::make_shared<cvedix_nodes::cvedix_app_src_node>("rest_source", 0)),
+                    recognizer_(std::make_shared<cvedix_nodes::cvedix_face_recognizer_node>(
+                        "rest_recognizer", settings.model_dir, settings.database_path,
+                        settings.threshold, settings.min_face_size, false, settings.use_gpu, settings.gpu_id,
+                        cvedix_nodes::FaceRecognizerMode::SYNC)),
           collector_(std::make_shared<RecognitionCollector>()) {
         load_registry();
         recognizer_->attach_to({source_});
@@ -511,6 +519,8 @@ public:
 
     json health() const {
         return { {"status", "ok"}, {"model_loaded", true},
+                 {"device", settings_.use_gpu ? "GPU" : "CPU"},
+                 {"gpu_id", settings_.use_gpu ? json(settings_.gpu_id) : json(nullptr)},
                  {"database_size", recognizer_->getDatabaseSize()} };
     }
 
@@ -568,6 +578,8 @@ private:
     // Caller must already hold request_mutex_.
     json settings_snapshot() const {
         return { {"success", true},
+                 {"device", settings_.use_gpu ? "GPU" : "CPU"},
+                 {"gpu_id", settings_.use_gpu ? json(settings_.gpu_id) : json(nullptr)},
                  {"similarity_threshold", settings_.threshold},
                  {"min_face_size", settings_.min_face_size},
                  {"liveness", liveness_.thresholds()} };
@@ -646,6 +658,42 @@ int main(int argc, char** argv) {
     if (argc > 2) settings.database_path = argv[2];
     if (argc > 3) settings.port = std::stoi(argv[3]);
 
+    for (int index = 4; index < argc; ++index) {
+        const std::string argument = argv[index];
+        if (argument == "--gpu") {
+            settings.use_gpu = true;
+        } else if (argument.rfind("--gpu-id=", 0) == 0) {
+            const auto value = argument.substr(9);
+            size_t parsed = 0;
+            try {
+                settings.gpu_id = std::stoi(value, &parsed);
+            } catch (const std::exception&) {
+                std::cerr << "Invalid GPU ID: " << value << '\n';
+                return 2;
+            }
+            if (parsed != value.size() || settings.gpu_id < 0) {
+                std::cerr << "GPU ID must be a non-negative integer: " << value << '\n';
+                return 2;
+            }
+            settings.use_gpu = true;
+        } else if (argument == "--cpu") {
+            settings.use_gpu = false;
+        } else {
+            std::cerr << "Unknown option: " << argument << '\n'
+                      << "Usage: heraface_server [model_dir] [database_path] [port] [--cpu|--gpu] [--gpu-id=N]\n";
+            return 2;
+        }
+    }
+
+    if (settings.use_gpu) {
+#ifndef CVEDIX_SEETAFACE6_GPU_AVAILABLE
+        std::cerr << "GPU requested, but this CoreAI build does not include a CUDA-enabled SeetaFace6/TenniS backend.\n"
+                  << "Build it with: cd third_party/seetaface6 && bash build_seetaface6.sh --gpu --clean\n"
+                  << "Then reconfigure CoreAI with CMake and rebuild heraface_server.\n";
+        return 1;
+#endif
+    }
+
     if (!std::filesystem::exists(settings.model_dir)) {
         std::cerr << "Model directory not found: " << settings.model_dir << '\n';
         return 1;
@@ -653,6 +701,8 @@ int main(int argc, char** argv) {
     std::filesystem::create_directories(std::filesystem::path(settings.database_path).parent_path());
 
     HeraFaceService service(settings);
+    std::cout << "SeetaFace inference device: "
+              << (settings.use_gpu ? "GPU:" + std::to_string(settings.gpu_id) : "CPU") << '\n';
     RequestMetrics metrics;
     httplib::Server server;
     server.set_payload_max_length(5 * 1024 * 1024);
